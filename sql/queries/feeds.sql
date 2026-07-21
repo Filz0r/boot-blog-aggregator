@@ -38,3 +38,15 @@ from feed_follows
     inner join feeds on feed_follows.feed_id = feeds.id
     inner join users as creator on feeds.user_id = creator.id
 where feed_follows.user_id = $1;
+-- name: UnfollowFeed :one
+with deleted as (
+    delete from feed_follows
+    where feed_follows.feed_id = $1
+        and feed_follows.user_id = $2
+    returning feed_id
+)
+select feeds.id,
+    feeds.name,
+    feeds.url
+from deleted
+    inner join feeds on feeds.id = deleted.feed_id;

@@ -53,6 +53,7 @@ func main() {
 	cmds.Register("feeds", commands.HandleListFeeds)
 	cmds.Register("follow", commands.MiddlewareLoggedIn(commands.HandleFollow))
 	cmds.Register("following", commands.MiddlewareLoggedIn(commands.HandleFollowing))
+	cmds.Register("unfollow", commands.MiddlewareLoggedIn(commands.HandleUnfollow))
 
 	// Run the commands
 	cmd := commands.Command{
