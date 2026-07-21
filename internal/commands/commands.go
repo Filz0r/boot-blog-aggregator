@@ -44,6 +44,23 @@ func (c Commands) Register(name string, cb CommandFunc) {
 	c.Handlers[name] = cb
 }
 
+func MiddlewareLoggedIn(
+	handler func(s *State, cmd Command, user database.User) error,
+) CommandFunc {
+	return func(s *State, cmd Command) error {
+		if s.Config.Username == nil {
+			return fmt.Errorf("There's no user currently logged in")
+		}
+
+		user, err := s.Db.GetUser(context.Background(), *s.Config.Username)
+
+		if err != nil {
+			return fmt.Errorf("Error finding user in the database :%w\n", err)
+		}
+		return handler(s, cmd, user)
+	}
+}
+
 func HandleLogin(s *State, cmd Command) error {
 	if len(cmd.Args) != 1 {
 		return fmt.Errorf("Insufficient arguments were provided, the <username> argument is required")
@@ -128,19 +145,13 @@ func HanldleAgg(s *State, cmd Command) error {
 	return nil
 }
 
-func HandleAddFeed(s *State, cmd Command) error {
+func HandleAddFeed(s *State, cmd Command, user database.User) error {
 	if len(cmd.Args) != 2 {
 		return fmt.Errorf("You need to pass an <feed name> and <feed url> to this command!")
 	}
 
 	name := cmd.Args[0]
 	url := cmd.Args[1]
-
-	user, err := s.Db.GetUser(context.Background(), *s.Config.Username)
-
-	if err != nil {
-		return fmt.Errorf("Error finding user in the database :%w\n", err)
-	}
 
 	feed, err := s.Db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        uuid.New(),
@@ -188,18 +199,12 @@ func HandleListFeeds(s *State, cmd Command) error {
 	return nil
 }
 
-func HandleFollow(s *State, cmd Command) error {
+func HandleFollow(s *State, cmd Command, user database.User) error {
 	if len(cmd.Args) != 1 {
 		return fmt.Errorf("You need to pass the url of a feed in order to follow it!")
 	}
 
 	url := cmd.Args[0]
-
-	user, err := s.Db.GetUser(context.Background(), *s.Config.Username)
-
-	if err != nil {
-		return fmt.Errorf("Error finding user in the database: %w", err)
-	}
 
 	feed, err := s.Db.GetFeedByUrl(context.Background(), url)
 
@@ -218,15 +223,9 @@ func HandleFollow(s *State, cmd Command) error {
 	return nil
 }
 
-func HandleFollowing(s *State, cmd Command) error {
+func HandleFollowing(s *State, cmd Command, user database.User) error {
 	if len(cmd.Args) != 0 {
 		return fmt.Errorf("You cannot pass arguments to this command!")
-	}
-
-	user, err := s.Db.GetUser(context.Background(), *s.Config.Username)
-
-	if err != nil {
-		return fmt.Errorf("Error finding user record in the database: %w", err)
 	}
 
 	feeds, err := s.Db.GetFeedFollowsForUser(context.Background(), user.ID)

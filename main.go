@@ -49,10 +49,10 @@ func main() {
 	cmds.Register("reset", commands.HandleReset)
 	cmds.Register("users", commands.HandleUserList)
 	cmds.Register("agg", commands.HanldleAgg)
-	cmds.Register("addfeed", commands.HandleAddFeed)
+	cmds.Register("addfeed", commands.MiddlewareLoggedIn(commands.HandleAddFeed))
 	cmds.Register("feeds", commands.HandleListFeeds)
-	cmds.Register("follow", commands.HandleFollow)
-	cmds.Register("following", commands.HandleFollowing)
+	cmds.Register("follow", commands.MiddlewareLoggedIn(commands.HandleFollow))
+	cmds.Register("following", commands.MiddlewareLoggedIn(commands.HandleFollowing))
 
 	// Run the commands
 	cmd := commands.Command{
