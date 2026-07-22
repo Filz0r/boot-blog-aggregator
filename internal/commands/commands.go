@@ -1,9 +1,9 @@
 package commands
 
 import (
-	"gator/internal"
-	"gator/internal/config"
-	"gator/internal/database"
+	"github.com/Filz0r/boot-blog-aggregator/internal"
+	"github.com/Filz0r/boot-blog-aggregator/internal/config"
+	"github.com/Filz0r/boot-blog-aggregator/internal/database"
 	"context"
 	"database/sql"
 	"errors"

@@ -1,4 +1,4 @@
-module gator
+module github.com/Filz0r/boot-blog-aggregator
 
 go 1.26.5
 
