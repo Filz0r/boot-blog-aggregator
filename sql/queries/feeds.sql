@@ -50,3 +50,14 @@ select feeds.id,
     feeds.url
 from deleted
     inner join feeds on feeds.id = deleted.feed_id;
+-- name: MarkFeedFetched :one
+update feeds
+set updated_at = $1,
+    last_fetched_at = $1
+where feeds.id = $2
+returning *;
+-- name: GetNextFeedToFetch :one
+select *
+from feeds
+order by last_fetched_at asc nulls first
+limit 1;

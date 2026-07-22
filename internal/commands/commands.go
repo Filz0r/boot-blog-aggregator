@@ -5,10 +5,15 @@ import (
 	"boot-blog-aggregator/internal/config"
 	"boot-blog-aggregator/internal/database"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type State struct {
@@ -133,14 +138,25 @@ func HandleUserList(s *State, cmd Command) error {
 	return nil
 }
 
-func HanldleAgg(s *State, cmd Command) error {
-	data, err := internal.FetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-
-	if err != nil {
-		return err
+func HandleAgg(s *State, cmd Command) error {
+	if len(cmd.Args) != 1 {
+		return fmt.Errorf("You can only pass a time_between_requests argument to this function!")
 	}
 
-	fmt.Println(data)
+	timeBetweenRequests, err := time.ParseDuration(cmd.Args[0])
+
+	if err != nil {
+		return fmt.Errorf("Error parsing duration time: %w", err)
+	}
+	ticker := time.NewTicker(timeBetweenRequests)
+
+	fmt.Printf("Collecting feed data every %s\n", timeBetweenRequests.String())
+	for ; ; <-ticker.C {
+		err = scrapeFeeds(s, context.Background())
+		if err != nil {
+			fmt.Printf("There was a error processing the feed: %v\n", err)
+		}
+	}
 
 	return nil
 }
@@ -262,5 +278,92 @@ func HandleUnfollow(s *State, cmd Command, user database.User) error {
 		return fmt.Errorf("Error unfollowing the feed %w", err)
 	}
 	fmt.Printf("Success unfollowing feed named %s with URL of %s\n", unfollowed.Name, unfollowed.Url)
+	return nil
+}
+
+func HandleBrowse(s *State, cmd Command, user database.User) error {
+	var limit int32
+	if len(cmd.Args) >= 1 {
+		l, err := strconv.Atoi(cmd.Args[0])
+		if err != nil {
+			return fmt.Errorf("Invalid limit was given: %w", err)
+		}
+		limit = int32(l)
+	} else {
+		limit = 2
+	}
+	posts, err := s.Db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  limit,
+	})
+	if err != nil {
+		return fmt.Errorf("Error getting posts for this user: %w", err)
+	}
+	delimiter := strings.Repeat("#", 50)
+	for i, post := range posts {
+		fmt.Printf("%s\n", delimiter)
+		fmt.Printf("Post:\t#%d (%s)\n", i, post.FeedName)
+		fmt.Printf("Title:\t%s\n", post.Title)
+		fmt.Printf("Description:\t%s\n", post.Description)
+		fmt.Printf("Link:\t%s\n", post.Url)
+		if post.PublishedAt.Valid {
+			fmt.Printf("Title:\t%s\n", post.PublishedAt.Time.String())
+		}
+		fmt.Printf("%s\n\n", delimiter)
+
+	}
+	return nil
+}
+
+func scrapeFeeds(s *State, ctx context.Context) error {
+	nextFeed, err := s.Db.GetNextFeedToFetch(ctx)
+	if err != nil {
+		return fmt.Errorf("Error getting next feed to fetch: %w", err)
+	}
+	marked, err := s.Db.MarkFeedFetched(ctx, database.MarkFeedFetchedParams{
+		UpdatedAt: time.Now(),
+		ID:        nextFeed.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("Error marking feed as fetched: %w", err)
+	}
+	fmt.Printf("Fetching data for feed %s (%s)\n", marked.Name, marked.Url)
+	feedData, err := internal.FetchFeed(ctx, marked.Url)
+	if err != nil {
+		return fmt.Errorf("Error fetching feed data: %w", err)
+	}
+	count := 0
+	for _, post := range feedData.Channel.Item {
+		var pubDate sql.NullTime
+		for _, layout := range []string{time.RFC1123Z, time.RFC1123, time.RFC3339, time.UnixDate} {
+			if t, err := time.Parse(layout, post.PubDate); err == nil {
+				pubDate = sql.NullTime{Time: t, Valid: true}
+				break
+			}
+		}
+		dbPost, err := s.Db.CreatePost(ctx, database.CreatePostParams{
+			CreatedAt:   time.Now(),
+			Title:       post.Title,
+			Url:         post.Link,
+			Description: post.Description,
+			PublishedAt: pubDate,
+			FeedID:      nextFeed.ID,
+		})
+		if err != nil {
+			var pgErr *pq.Error
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				continue
+			}
+			fmt.Printf("Error saving new post %q: %v\n", post.Link, err)
+			continue
+		}
+		fmt.Printf("Created new Post: %s\n", dbPost.Title)
+		count++
+	}
+	if count == 0 {
+		fmt.Println("No new posts were found!")
+	} else {
+		fmt.Printf("Added %v new posts from this feed!", count)
+	}
 	return nil
 }
