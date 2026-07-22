@@ -1,9 +1,9 @@
 package main
 
 import (
-	"boot-blog-aggregator/internal/commands"
-	"boot-blog-aggregator/internal/config"
-	"boot-blog-aggregator/internal/database"
+	"gator/internal/commands"
+	"gator/internal/config"
+	"gator/internal/database"
 	"database/sql"
 	"fmt"
 	"os"
